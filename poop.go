@@ -158,7 +158,7 @@ func (s *PoopStore) GetMostRecent(chatID int64) (*PoopRecord, error) {
 	return &records[0], nil
 }
 
-func (s *PoopStore) Update(id int64, chatID int64, texture string) (*PoopRecord, error) {
+func (s *PoopStore) UpdateTexture(id int64, chatID int64, texture string) (*PoopRecord, error) {
 	existing, err := s.GetByID(id, chatID)
 	if err != nil {
 		return nil, err
@@ -174,6 +174,25 @@ func (s *PoopStore) Update(id int64, chatID int64, texture string) (*PoopRecord,
 	}
 
 	existing.Texture = texture
+	return existing, nil
+}
+
+func (s *PoopStore) UpdateDatetime(id int64, chatID int64, datetime time.Time) (*PoopRecord, error) {
+	existing, err := s.GetByID(id, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("record not found")
+	}
+
+	query := `UPDATE poop_records SET datetime = ? WHERE id = ? AND chat_id = ?`
+	_, err = s.db.Exec(query, datetime.Format(time.RFC3339), id, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update record: %w", err)
+	}
+
+	existing.Datetime = datetime
 	return existing, nil
 }
 

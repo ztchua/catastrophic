@@ -31,5 +31,8 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# sqlite files
+*.db
+
 # binary for application
 catastrophic

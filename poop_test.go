@@ -217,13 +217,13 @@ func TestPoopStore_GetMostRecent_Empty(t *testing.T) {
 	}
 }
 
-func TestPoopStore_Update(t *testing.T) {
+func TestPoopStore_UpdateTexture(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
 	created, _ := store.Create(12345, "solid")
 
-	updated, err := store.Update(created.ID, 12345, "updated texture")
+	updated, err := store.UpdateTexture(created.ID, 12345, "updated texture")
 	if err != nil {
 		t.Fatalf("Failed to update record: %v", err)
 	}
@@ -238,23 +238,69 @@ func TestPoopStore_Update(t *testing.T) {
 	}
 }
 
-func TestPoopStore_Update_NotFound(t *testing.T) {
+func TestPoopStore_UpdateTexture_NotFound(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	_, err := store.Update(99999, 12345, "texture")
+	_, err := store.UpdateTexture(99999, 12345, "texture")
 	if err == nil {
 		t.Error("Expected error for non-existent record")
 	}
 }
 
-func TestPoopStore_Update_WrongChatID(t *testing.T) {
+func TestPoopStore_UpdateTexture_WrongChatID(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
 	created, _ := store.Create(12345, "solid")
 
-	_, err := store.Update(created.ID, 99999, "texture")
+	_, err := store.UpdateTexture(created.ID, 99999, "texture")
+	if err == nil {
+		t.Error("Expected error for wrong chat ID")
+	}
+}
+
+func TestPoopStore_UpdateDatetime(t *testing.T) {
+	store := setupTestStore(t)
+	defer store.Close()
+
+	created, _ := store.Create(12345, "solid")
+	newTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	updated, err := store.UpdateDatetime(created.ID, 12345, newTime)
+	if err != nil {
+		t.Fatalf("Failed to update record: %v", err)
+	}
+
+	if !updated.Datetime.Equal(newTime) {
+		t.Errorf("Expected datetime %v, got %v", newTime, updated.Datetime)
+	}
+
+	retrieved, _ := store.GetByID(created.ID, 12345)
+	if !retrieved.Datetime.Equal(newTime) {
+		t.Errorf("Update not persisted")
+	}
+}
+
+func TestPoopStore_UpdateDatetime_NotFound(t *testing.T) {
+	store := setupTestStore(t)
+	defer store.Close()
+
+	newTime := time.Now()
+	_, err := store.UpdateDatetime(99999, 12345, newTime)
+	if err == nil {
+		t.Error("Expected error for non-existent record")
+	}
+}
+
+func TestPoopStore_UpdateDatetime_WrongChatID(t *testing.T) {
+	store := setupTestStore(t)
+	defer store.Close()
+
+	created, _ := store.Create(12345, "solid")
+	newTime := time.Now()
+
+	_, err := store.UpdateDatetime(created.ID, 99999, newTime)
 	if err == nil {
 		t.Error("Expected error for wrong chat ID")
 	}

@@ -16,6 +16,8 @@ type ConversationState int
 const (
 	StateNone ConversationState = iota
 	StateAwaitingPoopTexture
+	StateAwaitingUpdateField
+	StateAwaitingUpdateValue
 )
 
 type ChatSession struct {
@@ -75,8 +77,15 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 	chatID := update.Message.Chat.ID
 	session := b.getSession(chatID)
 
-	if session.State == StateAwaitingPoopTexture {
+	switch session.State {
+	case StateAwaitingPoopTexture:
 		b.handleAwaitingTexture(update.Message)
+		return
+	case StateAwaitingUpdateField:
+		b.handleAwaitingUpdateField(update.Message)
+		return
+	case StateAwaitingUpdateValue:
+		b.handleAwaitingUpdateValue(update.Message)
 		return
 	}
 
@@ -137,7 +146,7 @@ Poop Tracking:
 /poop_list - List all records
 /poop_recent - Show 10 most recent records
 /poop_check - Check if pet hasn't pooped in 3+ days
-/poop_update <id> <texture> - Update a record
+/poop_update <id> - Update a record
 /poop_delete <id> - Delete a record`)
 
 	case "ping":
@@ -235,31 +244,110 @@ func (b *Bot) handlePoopCheck(chatID int64) {
 }
 
 func (b *Bot) handlePoopUpdate(chatID int64, args string) {
-	parts := strings.Fields(args)
-	if len(parts) < 2 {
-		b.SendMessage(chatID, "Usage: /poop_update <id> <texture>")
+	args = strings.TrimSpace(args)
+	if args == "" {
+		b.SendMessage(chatID, "Usage: /poop_update <id>")
 		return
 	}
 
-	id, err := strconv.ParseInt(parts[0], 10, 64)
+	id, err := strconv.ParseInt(args, 10, 64)
 	if err != nil {
 		b.SendMessage(chatID, "Invalid ID. Please provide a numeric ID.")
 		return
 	}
 
-	texture := strings.Join(parts[1:], " ")
-	if texture == "" {
-		b.SendMessage(chatID, "Texture cannot be empty.")
+	record, err := b.store.GetByID(id, chatID)
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to get record: %v", err))
+		return
+	}
+	if record == nil {
+		b.SendMessage(chatID, "Record not found.")
 		return
 	}
 
-	record, err := b.store.Update(id, chatID, texture)
+	session := b.getSession(chatID)
+	session.State = StateAwaitingUpdateField
+	session.Data["update_id"] = id
+
+	b.SendMessage(chatID, fmt.Sprintf(`Current record:
+%s
+
+What would you like to update?
+Reply with:
+1 - Datetime
+2 - Texture`, FormatRecord(record)))
+}
+
+func (b *Bot) handleAwaitingUpdateField(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession(chatID)
+	text := strings.TrimSpace(msg.Text)
+
+	switch text {
+	case "1":
+		session.Data["update_field"] = "datetime"
+		session.State = StateAwaitingUpdateValue
+		b.SendMessage(chatID, "Please enter the new datetime (format: YYYY-MM-DD HH:MM):")
+	case "2":
+		session.Data["update_field"] = "texture"
+		session.State = StateAwaitingUpdateValue
+		b.SendMessage(chatID, "Please enter the new texture:")
+	default:
+		b.SendMessage(chatID, "Invalid option. Reply with:\n1 - Datetime\n2 - Texture")
+	}
+}
+
+func (b *Bot) handleAwaitingUpdateValue(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession(chatID)
+
+	id, ok := session.Data["update_id"].(int64)
+	if !ok {
+		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
+		b.resetSession(chatID)
+		return
+	}
+
+	field, ok := session.Data["update_field"].(string)
+	if !ok {
+		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
+		b.resetSession(chatID)
+		return
+	}
+
+	var record *PoopRecord
+	var err error
+
+	switch field {
+	case "datetime":
+		datetime, parseErr := time.Parse("2006-01-02 15:04", strings.TrimSpace(msg.Text))
+		if parseErr != nil {
+			b.SendMessage(chatID, "Invalid datetime format. Please use: YYYY-MM-DD HH:MM")
+			return
+		}
+		record, err = b.store.UpdateDatetime(id, chatID, datetime)
+	case "texture":
+		texture := strings.TrimSpace(msg.Text)
+		if texture == "" {
+			b.SendMessage(chatID, "Texture cannot be empty. Please enter the new texture:")
+			return
+		}
+		record, err = b.store.UpdateTexture(id, chatID, texture)
+	default:
+		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
+		b.resetSession(chatID)
+		return
+	}
+
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to update record: %v", err))
+		b.resetSession(chatID)
 		return
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Record updated!\n%s", FormatRecord(record)))
+	b.resetSession(chatID)
 }
 
 func (b *Bot) handlePoopDelete(chatID int64, args string) {
