@@ -157,6 +157,21 @@ For larger projects, follow standard Go project layout:
 
 - `TELEGRAM_BOT_TOKEN`: Required. Your Telegram bot token from @BotFather.
 - `POOP_DB_PATH`: Optional. Path to SQLite database file. Defaults to `poop.db` in current directory.
+- `ALLOWED_USERS_PATH`: Optional. Path to allowed users config file. Defaults to `allowed_users.cfg`.
+
+## Configuration Files
+
+### allowed_users.cfg
+
+The bot is private and only allows access to users listed in `allowed_users.cfg`. Create this file with one username per line (with or without @ prefix):
+
+```
+@username1
+@username2
+# comments are ignored
+```
+
+Copy `allowed_users.cfg.example` and modify it with your allowed usernames.
 
 ## Key Dependencies
 

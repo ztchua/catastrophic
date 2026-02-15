@@ -12,13 +12,17 @@ func TestNewBot(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 
 	if bot == nil {
 		t.Fatal("Expected bot, got nil")
 	}
 	if bot.store == nil {
 		t.Error("Expected store to be set")
+	}
+	if bot.auth == nil {
+		t.Error("Expected auth to be set")
 	}
 	if bot.sessions == nil {
 		t.Error("Expected sessions map to be initialized")
@@ -29,7 +33,8 @@ func TestBot_GetSession(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 
 	session1 := bot.getSession(12345)
 	if session1 == nil {
@@ -54,7 +59,8 @@ func TestBot_ResetSession(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 
 	session := bot.getSession(12345)
 	session.State = StateAwaitingPoopTexture
@@ -75,7 +81,8 @@ func TestBot_HandleUpdate_NilMessage(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 
 	update := tgbotapi.Update{}
 	bot.HandleUpdate(update)
@@ -244,7 +251,8 @@ func TestChatSession_InitialState(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 	session := bot.getSession(12345)
 
 	if session.State != StateNone {
@@ -259,7 +267,8 @@ func TestBot_ConcurrentSessionAccess(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 
 	done := make(chan bool)
 
@@ -281,7 +290,8 @@ func TestBot_HandleUpdate_AwaitingTextureState(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
-	bot := NewBot(nil, store)
+	auth := setupTestAuth(t)
+	bot := NewBot(nil, store, auth)
 	bot.getSession(12345).State = StateAwaitingPoopTexture
 	bot.getSession(12345).Data["chat_id"] = int64(12345)
 
@@ -293,4 +303,13 @@ func TestBot_HandleUpdate_AwaitingTextureState(t *testing.T) {
 func setupTestStoreBot(t *testing.T) *PoopStore {
 	t.Helper()
 	return setupTestStore(t)
+}
+
+func setupTestAuth(t *testing.T) *AuthService {
+	t.Helper()
+	auth, err := NewAuthService("allowed_users.cfg.example")
+	if err != nil {
+		t.Fatalf("Failed to create test auth: %v", err)
+	}
+	return auth
 }

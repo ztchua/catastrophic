@@ -34,5 +34,6 @@ go.work.sum
 # sqlite files
 *.db
 
-# binary for application
+# application-specific configurations/binaries
 catastrophic
+allowed_users.cfg

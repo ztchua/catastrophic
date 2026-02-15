@@ -18,6 +18,17 @@ func main() {
 		dbPath = "poop.db"
 	}
 
+	authPath := os.Getenv("ALLOWED_USERS_PATH")
+	if authPath == "" {
+		authPath = "allowed_users.cfg"
+	}
+
+	auth, err := NewAuthService(authPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize auth: %v", err)
+	}
+	log.Printf("Loaded %d allowed users", auth.GetAllowedCount())
+
 	store, err := NewPoopStore(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize store: %v", err)
@@ -32,7 +43,7 @@ func main() {
 	api.Debug = true
 	log.Printf("Authorized on account %s", api.Self.UserName)
 
-	bot := NewBot(api, store)
+	bot := NewBot(api, store, auth)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

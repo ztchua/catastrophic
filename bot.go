@@ -28,14 +28,16 @@ type ChatSession struct {
 type Bot struct {
 	api        *tgbotapi.BotAPI
 	store      *PoopStore
+	auth       *AuthService
 	sessions   map[int64]*ChatSession
 	sessionsMu sync.RWMutex
 }
 
-func NewBot(api *tgbotapi.BotAPI, store *PoopStore) *Bot {
+func NewBot(api *tgbotapi.BotAPI, store *PoopStore, auth *AuthService) *Bot {
 	return &Bot{
 		api:      api,
 		store:    store,
+		auth:     auth,
 		sessions: make(map[int64]*ChatSession),
 	}
 }
@@ -75,6 +77,13 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 	}
 
 	chatID := update.Message.Chat.ID
+	username := update.Message.From.UserName
+
+	if !b.auth.IsAllowed(username) {
+		b.SendMessage(chatID, "Access denied. You are not authorized to use this bot.")
+		return
+	}
+
 	session := b.getSession(chatID)
 
 	switch session.State {
