@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,14 +13,20 @@ func TestNewBot(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 
 	if bot == nil {
 		t.Fatal("Expected bot, got nil")
 	}
 	if bot.store == nil {
 		t.Error("Expected store to be set")
+	}
+	if bot.expenseStore == nil {
+		t.Error("Expected expenseStore to be set")
 	}
 	if bot.auth == nil {
 		t.Error("Expected auth to be set")
@@ -33,8 +40,11 @@ func TestBot_GetSession(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 
 	session1 := bot.getSession(12345)
 	if session1 == nil {
@@ -59,8 +69,11 @@ func TestBot_ResetSession(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 
 	session := bot.getSession(12345)
 	session.State = StateAwaitingPoopTexture
@@ -81,8 +94,11 @@ func TestBot_HandleUpdate_NilMessage(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 
 	update := tgbotapi.Update{}
 	bot.HandleUpdate(update)
@@ -251,8 +267,11 @@ func TestChatSession_InitialState(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 	session := bot.getSession(12345)
 
 	if session.State != StateNone {
@@ -267,8 +286,11 @@ func TestBot_ConcurrentSessionAccess(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 
 	done := make(chan bool)
 
@@ -290,8 +312,11 @@ func TestBot_HandleUpdate_AwaitingTextureState(t *testing.T) {
 	store := setupTestStoreBot(t)
 	defer store.Close()
 
+	expenseStore := setupTestExpenseStore(t)
+	defer expenseStore.Close()
+
 	auth := setupTestAuth(t)
-	bot := NewBot(nil, store, auth)
+	bot := NewBot(nil, store, expenseStore, auth)
 	bot.getSession(12345).State = StateAwaitingPoopTexture
 	bot.getSession(12345).Data["chat_id"] = int64(12345)
 
@@ -303,6 +328,28 @@ func TestBot_HandleUpdate_AwaitingTextureState(t *testing.T) {
 func setupTestStoreBot(t *testing.T) *PoopStore {
 	t.Helper()
 	return setupTestStore(t)
+}
+
+func setupTestExpenseStore(t *testing.T) *ExpenseStore {
+	t.Helper()
+	tmpFile, err := os.CreateTemp("", "expense_test_*.db")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	store, err := NewExpenseStore(tmpFile.Name())
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		t.Fatalf("Failed to create expense store: %v", err)
+	}
+
+	t.Cleanup(func() {
+		store.Close()
+		os.Remove(tmpFile.Name())
+	})
+
+	return store
 }
 
 func setupTestAuth(t *testing.T) *AuthService {

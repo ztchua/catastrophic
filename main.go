@@ -18,6 +18,11 @@ func main() {
 		dbPath = "poop.db"
 	}
 
+	expenseDbPath := os.Getenv("EXPENSE_DB_PATH")
+	if expenseDbPath == "" {
+		expenseDbPath = "expense.db"
+	}
+
 	authPath := os.Getenv("ALLOWED_USERS_PATH")
 	if authPath == "" {
 		authPath = "allowed_users.cfg"
@@ -35,6 +40,12 @@ func main() {
 	}
 	defer store.Close()
 
+	expenseStore, err := NewExpenseStore(expenseDbPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize expense store: %v", err)
+	}
+	defer expenseStore.Close()
+
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v", err)
@@ -43,7 +54,7 @@ func main() {
 	api.Debug = true
 	log.Printf("Authorized on account %s", api.Self.UserName)
 
-	bot := NewBot(api, store, auth)
+	bot := NewBot(api, store, expenseStore, auth)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

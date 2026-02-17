@@ -1,6 +1,6 @@
 # Catastrophic
 
-A Telegram bot for tracking pet poop records with SQLite storage.
+A Telegram bot for tracking pet poop records and expenses with SQLite storage.
 
 [![CI](https://github.com/ztchua/catastrophic/actions/workflows/ci.yml/badge.svg)](https://github.com/ztchua/catastrophic/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ztchua/catastrophic)](https://goreportcard.com/report/github.com/ztchua/catastrophic)
@@ -14,6 +14,9 @@ A Telegram bot for tracking pet poop records with SQLite storage.
 - Check if pet hasn't pooped in 3+ days (health warning)
 - Update records (datetime or texture)
 - Delete records
+- Track cat expenses with categories (food, litter, vet, toys, etc.)
+- View total spent this month
+- Filter expenses by category for past 30 days
 - Per-chat isolation of records
 - Private bot - only allowed users can interact
 
@@ -30,6 +33,12 @@ A Telegram bot for tracking pet poop records with SQLite storage.
 | `/poop_check` | Check if pet hasn't pooped in 3+ days |
 | `/poop_update <id>` | Update a record |
 | `/poop_delete <id>` | Delete a record |
+| `/expense_add` | Add a new expense |
+| `/expense_list` | List all expenses |
+| `/expense_month` | Show total spent this month |
+| `/expense_category <category>` | Filter by category (past 30 days) |
+| `/expense_update <id>` | Update an expense |
+| `/expense_delete <id>` | Delete an expense |
 
 ## Setup
 
@@ -72,7 +81,8 @@ go build -o catastrophic .
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Yes | - | Telegram bot token from @BotFather |
-| `POOP_DB_PATH` | No | `poop.db` | Path to SQLite database file |
+| `POOP_DB_PATH` | No | `poop.db` | Path to SQLite database file for poop records |
+| `EXPENSE_DB_PATH` | No | `expense.db` | Path to SQLite database file for expense records |
 | `ALLOWED_USERS_PATH` | No | `allowed_users.cfg` | Path to allowed users config |
 
 ## Development

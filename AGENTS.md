@@ -156,7 +156,8 @@ For larger projects, follow standard Go project layout:
 ## Environment Variables
 
 - `TELEGRAM_BOT_TOKEN`: Required. Your Telegram bot token from @BotFather.
-- `POOP_DB_PATH`: Optional. Path to SQLite database file. Defaults to `poop.db` in current directory.
+- `POOP_DB_PATH`: Optional. Path to SQLite database file for poop records. Defaults to `poop.db` in current directory.
+- `EXPENSE_DB_PATH`: Optional. Path to SQLite database file for expense records. Defaults to `expense.db` in current directory.
 - `ALLOWED_USERS_PATH`: Optional. Path to allowed users config file. Defaults to `allowed_users.cfg`.
 
 ## Configuration Files
