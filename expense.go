@@ -238,7 +238,7 @@ func FormatExpenseRecord(record *ExpenseRecord) string {
 	return fmt.Sprintf(
 		"ID: %d\nDate: %s\nItem: %s\nCategory: %s\nQuantity: %.2f\nPrice: %.2f\nTotal: %.2f",
 		record.ID,
-		record.Datetime.Format("2006-01-02 15:04"),
+		record.Datetime.In(DisplayLocation).Format("2006-01-02 15:04"),
 		record.ItemName,
 		record.Category,
 		record.Quantity,
@@ -259,7 +259,7 @@ func FormatExpenseRecordsList(records []ExpenseRecord) string {
 		grandTotal += total
 		result += fmt.Sprintf("%d. %s - %s (%s) x%.0f @%.2f = %.2f\n",
 			i+1,
-			record.Datetime.Format("2006-01-02 15:04"),
+			record.Datetime.In(DisplayLocation).Format("2006-01-02 15:04"),
 			record.ItemName,
 			record.Category,
 			record.Quantity,

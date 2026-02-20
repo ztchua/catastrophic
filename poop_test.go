@@ -387,7 +387,8 @@ func TestFormatRecord(t *testing.T) {
 
 	result := FormatRecord(record)
 
-	expected := "ID: 42\nDate: 2024-01-15 14:30\nTexture: solid"
+	// 14:30 UTC = 22:30 UTC+8
+	expected := "ID: 42\nDate: 2024-01-15 22:30\nTexture: solid"
 	if result != expected {
 		t.Errorf("Expected '%s', got '%s'", expected, result)
 	}

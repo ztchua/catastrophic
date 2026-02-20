@@ -10,6 +10,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// DisplayLocation is the timezone used for displaying times (UTC+8)
+var DisplayLocation = time.FixedZone("UTC+8", 8*60*60)
+
 type PoopRecord struct {
 	ID       int64
 	Datetime time.Time
@@ -246,7 +249,7 @@ func FormatRecord(record *PoopRecord) string {
 	return fmt.Sprintf(
 		"ID: %d\nDate: %s\nTexture: %s",
 		record.ID,
-		record.Datetime.Format("2006-01-02 15:04"),
+		record.Datetime.In(DisplayLocation).Format("2006-01-02 15:04"),
 		record.Texture,
 	)
 }
@@ -258,7 +261,7 @@ func FormatRecordsList(records []PoopRecord) string {
 
 	var result string
 	for i, record := range records {
-		result += fmt.Sprintf("%d. %s - %s\n", i+1, record.Datetime.Format("2006-01-02 15:04"), record.Texture)
+		result += fmt.Sprintf("%d. %s - %s\n", i+1, record.Datetime.In(DisplayLocation).Format("2006-01-02 15:04"), record.Texture)
 	}
 	return result
 }
