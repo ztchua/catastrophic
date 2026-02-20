@@ -50,23 +50,27 @@ func NewBot(api *tgbotapi.BotAPI, store *PoopStore, expenseStore *ExpenseStore, 
 	}
 }
 
-func (b *Bot) getSession(chatID int64) *ChatSession {
+// SharedSessionKey is used for centralized session storage
+// Since access is controlled by auth, all authorized users share the same session
+const SharedSessionKey int64 = 0
+
+func (b *Bot) getSession() *ChatSession {
 	b.sessionsMu.Lock()
 	defer b.sessionsMu.Unlock()
 
-	if _, exists := b.sessions[chatID]; !exists {
-		b.sessions[chatID] = &ChatSession{
+	if _, exists := b.sessions[SharedSessionKey]; !exists {
+		b.sessions[SharedSessionKey] = &ChatSession{
 			State: StateNone,
 			Data:  make(map[string]interface{}),
 		}
 	}
-	return b.sessions[chatID]
+	return b.sessions[SharedSessionKey]
 }
 
-func (b *Bot) resetSession(chatID int64) {
+func (b *Bot) resetSession() {
 	b.sessionsMu.Lock()
 	defer b.sessionsMu.Unlock()
-	b.sessions[chatID] = &ChatSession{
+	b.sessions[SharedSessionKey] = &ChatSession{
 		State: StateNone,
 		Data:  make(map[string]interface{}),
 	}
@@ -94,7 +98,8 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 		return
 	}
 
-	session := b.getSession(chatID)
+	// Use shared session since all authorized users share the same data
+	session := b.getSession()
 
 	switch session.State {
 	case StateAwaitingPoopTexture:
@@ -135,7 +140,6 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 
 func (b *Bot) handleAwaitingTexture(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
 	texture := strings.TrimSpace(msg.Text)
 
 	if texture == "" {
@@ -143,22 +147,15 @@ func (b *Bot) handleAwaitingTexture(msg *tgbotapi.Message) {
 		return
 	}
 
-	chatIDFloat, ok := session.Data["chat_id"].(int64)
-	if !ok {
-		b.SendMessage(chatID, "Session error. Please start over with /poop_add")
-		b.resetSession(chatID)
-		return
-	}
-
-	record, err := b.store.Create(chatIDFloat, texture)
+	record, err := b.store.Create(texture)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to save record: %v", err))
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Record saved!\n%s", FormatRecord(record)))
-	b.resetSession(chatID)
+	b.resetSession()
 }
 
 func (b *Bot) HandleCommand(msg *tgbotapi.Message) {
@@ -239,14 +236,13 @@ Expense Tracking:
 }
 
 func (b *Bot) handlePoopAdd(chatID int64) {
-	session := b.getSession(chatID)
+	session := b.getSession()
 	session.State = StateAwaitingPoopTexture
-	session.Data["chat_id"] = chatID
 	b.SendMessage(chatID, "Please enter the poop texture:")
 }
 
 func (b *Bot) handlePoopList(chatID int64) {
-	records, err := b.store.GetAll(chatID)
+	records, err := b.store.GetAll()
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get records: %v", err))
 		return
@@ -262,7 +258,7 @@ func (b *Bot) handlePoopList(chatID int64) {
 }
 
 func (b *Bot) handlePoopRecent(chatID int64) {
-	records, err := b.store.GetRecent(chatID, 10)
+	records, err := b.store.GetRecent(10)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get records: %v", err))
 		return
@@ -278,7 +274,7 @@ func (b *Bot) handlePoopRecent(chatID int64) {
 }
 
 func (b *Bot) handlePoopCheck(chatID int64) {
-	record, isOverdue, err := b.store.CheckIfOverdue(chatID)
+	record, isOverdue, err := b.store.CheckIfOverdue()
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to check records: %v", err))
 		return
@@ -319,7 +315,7 @@ func (b *Bot) handlePoopUpdate(chatID int64, args string) {
 		return
 	}
 
-	record, err := b.store.GetByID(id, chatID)
+	record, err := b.store.GetByID(id)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get record: %v", err))
 		return
@@ -329,7 +325,7 @@ func (b *Bot) handlePoopUpdate(chatID int64, args string) {
 		return
 	}
 
-	session := b.getSession(chatID)
+	session := b.getSession()
 	session.State = StateAwaitingUpdateField
 	session.Data["update_id"] = id
 
@@ -344,7 +340,7 @@ Reply with:
 
 func (b *Bot) handleAwaitingUpdateField(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	text := strings.TrimSpace(msg.Text)
 
 	switch text {
@@ -363,19 +359,19 @@ func (b *Bot) handleAwaitingUpdateField(msg *tgbotapi.Message) {
 
 func (b *Bot) handleAwaitingUpdateValue(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 
 	id, ok := session.Data["update_id"].(int64)
 	if !ok {
 		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	field, ok := session.Data["update_field"].(string)
 	if !ok {
 		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
@@ -389,28 +385,28 @@ func (b *Bot) handleAwaitingUpdateValue(msg *tgbotapi.Message) {
 			b.SendMessage(chatID, "Invalid datetime format. Please use: YYYY-MM-DD HH:MM")
 			return
 		}
-		record, err = b.store.UpdateDatetime(id, chatID, datetime)
+		record, err = b.store.UpdateDatetime(id, datetime)
 	case "texture":
 		texture := strings.TrimSpace(msg.Text)
 		if texture == "" {
 			b.SendMessage(chatID, "Texture cannot be empty. Please enter the new texture:")
 			return
 		}
-		record, err = b.store.UpdateTexture(id, chatID, texture)
+		record, err = b.store.UpdateTexture(id, texture)
 	default:
 		b.SendMessage(chatID, "Session error. Please start over with /poop_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to update record: %v", err))
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Record updated!\n%s", FormatRecord(record)))
-	b.resetSession(chatID)
+	b.resetSession()
 }
 
 func (b *Bot) handlePoopDelete(chatID int64, args string) {
@@ -426,7 +422,7 @@ func (b *Bot) handlePoopDelete(chatID int64, args string) {
 		return
 	}
 
-	if err := b.store.Delete(id, chatID); err != nil {
+	if err := b.store.Delete(id); err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to delete record: %v", err))
 		return
 	}
@@ -446,15 +442,14 @@ func timeSinceRecord(t time.Time) string {
 }
 
 func (b *Bot) handleExpenseAdd(chatID int64) {
-	session := b.getSession(chatID)
+	session := b.getSession()
 	session.State = StateAwaitingExpenseItemName
-	session.Data["chat_id"] = chatID
 	b.SendMessage(chatID, "Please enter the item name:")
 }
 
 func (b *Bot) handleAwaitingExpenseItemName(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	itemName := strings.TrimSpace(msg.Text)
 
 	if itemName == "" {
@@ -469,7 +464,7 @@ func (b *Bot) handleAwaitingExpenseItemName(msg *tgbotapi.Message) {
 
 func (b *Bot) handleAwaitingExpenseCategory(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	category := strings.TrimSpace(msg.Text)
 
 	if category == "" {
@@ -484,7 +479,7 @@ func (b *Bot) handleAwaitingExpenseCategory(msg *tgbotapi.Message) {
 
 func (b *Bot) handleAwaitingExpenseQuantity(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	quantityStr := strings.TrimSpace(msg.Text)
 
 	quantity, err := strconv.ParseFloat(quantityStr, 64)
@@ -500,7 +495,7 @@ func (b *Bot) handleAwaitingExpenseQuantity(msg *tgbotapi.Message) {
 
 func (b *Bot) handleAwaitingExpensePrice(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	priceStr := strings.TrimSpace(msg.Text)
 
 	price, err := strconv.ParseFloat(priceStr, 64)
@@ -509,30 +504,23 @@ func (b *Bot) handleAwaitingExpensePrice(msg *tgbotapi.Message) {
 		return
 	}
 
-	chatIDVal, ok := session.Data["chat_id"].(int64)
-	if !ok {
-		b.SendMessage(chatID, "Session error. Please start over with /expense_add")
-		b.resetSession(chatID)
-		return
-	}
-
 	itemName, _ := session.Data["item_name"].(string)
 	category, _ := session.Data["category"].(string)
 	quantity, _ := session.Data["quantity"].(float64)
 
-	record, err := b.expenseStore.Create(chatIDVal, itemName, category, quantity, price)
+	record, err := b.expenseStore.Create(itemName, category, quantity, price)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to save expense: %v", err))
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Expense saved!\n%s", FormatExpenseRecord(record)))
-	b.resetSession(chatID)
+	b.resetSession()
 }
 
 func (b *Bot) handleExpenseList(chatID int64) {
-	records, err := b.expenseStore.GetAll(chatID)
+	records, err := b.expenseStore.GetAll()
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get expenses: %v", err))
 		return
@@ -548,7 +536,7 @@ func (b *Bot) handleExpenseList(chatID int64) {
 }
 
 func (b *Bot) handleExpenseMonth(chatID int64) {
-	total, err := b.expenseStore.GetTotalSpentCurrentMonth(chatID)
+	total, err := b.expenseStore.GetTotalSpentCurrentMonth()
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to calculate total: %v", err))
 		return
@@ -564,7 +552,7 @@ func (b *Bot) handleExpenseCategory(chatID int64, args string) {
 		return
 	}
 
-	records, err := b.expenseStore.GetByCategoryPast30Days(chatID, args)
+	records, err := b.expenseStore.GetByCategoryPast30Days(args)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get expenses: %v", err))
 		return
@@ -592,7 +580,7 @@ func (b *Bot) handleExpenseUpdate(chatID int64, args string) {
 		return
 	}
 
-	record, err := b.expenseStore.GetByID(id, chatID)
+	record, err := b.expenseStore.GetByID(id)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to get expense: %v", err))
 		return
@@ -602,7 +590,7 @@ func (b *Bot) handleExpenseUpdate(chatID int64, args string) {
 		return
 	}
 
-	session := b.getSession(chatID)
+	session := b.getSession()
 	session.State = StateAwaitingExpenseUpdateField
 	session.Data["update_id"] = id
 
@@ -619,7 +607,7 @@ Reply with:
 
 func (b *Bot) handleAwaitingExpenseUpdateField(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 	text := strings.TrimSpace(msg.Text)
 
 	switch text {
@@ -646,26 +634,26 @@ func (b *Bot) handleAwaitingExpenseUpdateField(msg *tgbotapi.Message) {
 
 func (b *Bot) handleAwaitingExpenseUpdateValue(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
-	session := b.getSession(chatID)
+	session := b.getSession()
 
 	id, ok := session.Data["update_id"].(int64)
 	if !ok {
 		b.SendMessage(chatID, "Session error. Please start over with /expense_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	field, ok := session.Data["update_field"].(string)
 	if !ok {
 		b.SendMessage(chatID, "Session error. Please start over with /expense_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
-	record, err := b.expenseStore.GetByID(id, chatID)
+	record, err := b.expenseStore.GetByID(id)
 	if err != nil || record == nil {
 		b.SendMessage(chatID, "Failed to get expense record")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
@@ -703,19 +691,19 @@ func (b *Bot) handleAwaitingExpenseUpdateValue(msg *tgbotapi.Message) {
 		newPrice = price
 	default:
 		b.SendMessage(chatID, "Session error. Please start over with /expense_update <id>")
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
-	updated, err := b.expenseStore.Update(id, chatID, newItemName, newCategory, newQuantity, newPrice)
+	updated, err := b.expenseStore.Update(id, newItemName, newCategory, newQuantity, newPrice)
 	if err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to update expense: %v", err))
-		b.resetSession(chatID)
+		b.resetSession()
 		return
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Expense updated!\n%s", FormatExpenseRecord(updated)))
-	b.resetSession(chatID)
+	b.resetSession()
 }
 
 func (b *Bot) handleExpenseDelete(chatID int64, args string) {
@@ -731,7 +719,7 @@ func (b *Bot) handleExpenseDelete(chatID int64, args string) {
 		return
 	}
 
-	if err := b.expenseStore.Delete(id, chatID); err != nil {
+	if err := b.expenseStore.Delete(id); err != nil {
 		b.SendMessage(chatID, fmt.Sprintf("Failed to delete expense: %v", err))
 		return
 	}

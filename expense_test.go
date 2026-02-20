@@ -10,16 +10,13 @@ func TestExpenseStore_Create(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	record, err := store.Create(12345, "Cat Food", "food", 2.0, 25.50)
+	record, err := store.Create("Cat Food", "food", 2.0, 25.50)
 	if err != nil {
 		t.Fatalf("Failed to create record: %v", err)
 	}
 
 	if record.ID == 0 {
 		t.Error("Expected non-zero ID")
-	}
-	if record.ChatID != 12345 {
-		t.Errorf("Expected ChatID 12345, got %d", record.ChatID)
 	}
 	if record.ItemName != "Cat Food" {
 		t.Errorf("Expected item name 'Cat Food', got '%s'", record.ItemName)
@@ -42,9 +39,9 @@ func TestExpenseStore_GetByID(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "Litter", "supplies", 1.0, 15.00)
+	created, _ := store.Create("Litter", "supplies", 1.0, 15.00)
 
-	record, err := store.GetByID(created.ID, 12345)
+	record, err := store.GetByID(created.ID)
 	if err != nil {
 		t.Fatalf("Failed to get record: %v", err)
 	}
@@ -64,7 +61,7 @@ func TestExpenseStore_GetByID_NotFound(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	record, err := store.GetByID(99999, 12345)
+	record, err := store.GetByID(99999)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -73,30 +70,15 @@ func TestExpenseStore_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestExpenseStore_GetByID_WrongChatID(t *testing.T) {
-	store := setupExpenseTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "Cat Food", "food", 1.0, 10.00)
-
-	record, err := store.GetByID(created.ID, 99999)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if record != nil {
-		t.Error("Expected nil record for wrong chat ID")
-	}
-}
-
 func TestExpenseStore_GetAll(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "Cat Food", "food", 2.0, 25.00)
-	store.Create(12345, "Litter", "supplies", 1.0, 15.00)
-	store.Create(12345, "Vet Visit", "vet", 1.0, 100.00)
+	store.Create("Cat Food", "food", 2.0, 25.00)
+	store.Create("Litter", "supplies", 1.0, 15.00)
+	store.Create("Vet Visit", "vet", 1.0, 100.00)
 
-	records, err := store.GetAll(12345)
+	records, err := store.GetAll()
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -110,7 +92,7 @@ func TestExpenseStore_GetAll_Empty(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	records, err := store.GetAll(12345)
+	records, err := store.GetAll()
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -120,31 +102,13 @@ func TestExpenseStore_GetAll_Empty(t *testing.T) {
 	}
 }
 
-func TestExpenseStore_GetAll_IsolatedByChatID(t *testing.T) {
-	store := setupExpenseTestStore(t)
-	defer store.Close()
-
-	store.Create(12345, "Cat Food", "food", 1.0, 10.00)
-	store.Create(67890, "Dog Food", "food", 1.0, 15.00)
-
-	records1, _ := store.GetAll(12345)
-	records2, _ := store.GetAll(67890)
-
-	if len(records1) != 1 {
-		t.Errorf("Expected 1 record for chat 12345, got %d", len(records1))
-	}
-	if len(records2) != 1 {
-		t.Errorf("Expected 1 record for chat 67890, got %d", len(records2))
-	}
-}
-
 func TestExpenseStore_Update(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "Cat Food", "food", 2.0, 25.00)
+	created, _ := store.Create("Cat Food", "food", 2.0, 25.00)
 
-	updated, err := store.Update(created.ID, 12345, "Premium Cat Food", "food", 3.0, 30.00)
+	updated, err := store.Update(created.ID, "Premium Cat Food", "food", 3.0, 30.00)
 	if err != nil {
 		t.Fatalf("Failed to update record: %v", err)
 	}
@@ -159,7 +123,7 @@ func TestExpenseStore_Update(t *testing.T) {
 		t.Errorf("Expected price 30.00, got %f", updated.Price)
 	}
 
-	retrieved, _ := store.GetByID(created.ID, 12345)
+	retrieved, _ := store.GetByID(created.ID)
 	if retrieved.ItemName != "Premium Cat Food" {
 		t.Errorf("Update not persisted")
 	}
@@ -169,21 +133,9 @@ func TestExpenseStore_Update_NotFound(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	_, err := store.Update(99999, 12345, "Item", "category", 1.0, 10.00)
+	_, err := store.Update(99999, "Item", "category", 1.0, 10.00)
 	if err == nil {
 		t.Error("Expected error for non-existent record")
-	}
-}
-
-func TestExpenseStore_Update_WrongChatID(t *testing.T) {
-	store := setupExpenseTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "Cat Food", "food", 1.0, 10.00)
-
-	_, err := store.Update(created.ID, 99999, "Item", "category", 1.0, 10.00)
-	if err == nil {
-		t.Error("Expected error for wrong chat ID")
 	}
 }
 
@@ -191,14 +143,14 @@ func TestExpenseStore_Delete(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "Cat Food", "food", 1.0, 10.00)
+	created, _ := store.Create("Cat Food", "food", 1.0, 10.00)
 
-	err := store.Delete(created.ID, 12345)
+	err := store.Delete(created.ID)
 	if err != nil {
 		t.Fatalf("Failed to delete record: %v", err)
 	}
 
-	record, _ := store.GetByID(created.ID, 12345)
+	record, _ := store.GetByID(created.ID)
 	if record != nil {
 		t.Error("Record still exists after deletion")
 	}
@@ -208,21 +160,9 @@ func TestExpenseStore_Delete_NotFound(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	err := store.Delete(99999, 12345)
+	err := store.Delete(99999)
 	if err == nil {
 		t.Error("Expected error for non-existent record")
-	}
-}
-
-func TestExpenseStore_Delete_WrongChatID(t *testing.T) {
-	store := setupExpenseTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "Cat Food", "food", 1.0, 10.00)
-
-	err := store.Delete(created.ID, 99999)
-	if err == nil {
-		t.Error("Expected error for wrong chat ID")
 	}
 }
 
@@ -230,10 +170,10 @@ func TestExpenseStore_GetTotalSpentCurrentMonth(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "Cat Food", "food", 2.0, 25.00)
-	store.Create(12345, "Litter", "supplies", 1.0, 15.00)
+	store.Create("Cat Food", "food", 2.0, 25.00)
+	store.Create("Litter", "supplies", 1.0, 15.00)
 
-	total, err := store.GetTotalSpentCurrentMonth(12345)
+	total, err := store.GetTotalSpentCurrentMonth()
 	if err != nil {
 		t.Fatalf("Failed to get total: %v", err)
 	}
@@ -248,7 +188,7 @@ func TestExpenseStore_GetTotalSpentCurrentMonth_Empty(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	total, err := store.GetTotalSpentCurrentMonth(12345)
+	total, err := store.GetTotalSpentCurrentMonth()
 	if err != nil {
 		t.Fatalf("Failed to get total: %v", err)
 	}
@@ -264,16 +204,16 @@ func TestExpenseStore_GetTotalSpentCurrentMonth_PreviousMonthExcluded(t *testing
 
 	lastMonth := time.Now().AddDate(0, -1, 0)
 	_, err := store.db.Exec(
-		"INSERT INTO expense_records (chat_id, datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?, ?)",
-		12345, lastMonth.Format(time.RFC3339), "Old Food", "food", 1.0, 100.00,
+		"INSERT INTO expense_records (datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?)",
+		lastMonth.Format(time.RFC3339), "Old Food", "food", 1.0, 100.00,
 	)
 	if err != nil {
 		t.Fatalf("Failed to insert old record: %v", err)
 	}
 
-	store.Create(12345, "New Food", "food", 1.0, 50.00)
+	store.Create("New Food", "food", 1.0, 50.00)
 
-	total, err := store.GetTotalSpentCurrentMonth(12345)
+	total, err := store.GetTotalSpentCurrentMonth()
 	if err != nil {
 		t.Fatalf("Failed to get total: %v", err)
 	}
@@ -287,11 +227,11 @@ func TestExpenseStore_GetByCategoryPast30Days(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "Cat Food", "food", 2.0, 25.00)
-	store.Create(12345, "Treats", "food", 1.0, 10.00)
-	store.Create(12345, "Litter", "supplies", 1.0, 15.00)
+	store.Create("Cat Food", "food", 2.0, 25.00)
+	store.Create("Treats", "food", 1.0, 10.00)
+	store.Create("Litter", "supplies", 1.0, 15.00)
 
-	records, err := store.GetByCategoryPast30Days(12345, "food")
+	records, err := store.GetByCategoryPast30Days("food")
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -311,9 +251,9 @@ func TestExpenseStore_GetByCategoryPast30Days_NoMatch(t *testing.T) {
 	store := setupExpenseTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "Cat Food", "food", 1.0, 10.00)
+	store.Create("Cat Food", "food", 1.0, 10.00)
 
-	records, err := store.GetByCategoryPast30Days(12345, "vet")
+	records, err := store.GetByCategoryPast30Days("vet")
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -329,16 +269,16 @@ func TestExpenseStore_GetByCategoryPast30Days_OldRecordsExcluded(t *testing.T) {
 
 	thirtyOneDaysAgo := time.Now().AddDate(0, 0, -31)
 	_, err := store.db.Exec(
-		"INSERT INTO expense_records (chat_id, datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?, ?)",
-		12345, thirtyOneDaysAgo.Format(time.RFC3339), "Old Food", "food", 1.0, 10.00,
+		"INSERT INTO expense_records (datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?)",
+		thirtyOneDaysAgo.Format(time.RFC3339), "Old Food", "food", 1.0, 10.00,
 	)
 	if err != nil {
 		t.Fatalf("Failed to insert old record: %v", err)
 	}
 
-	store.Create(12345, "New Food", "food", 1.0, 15.00)
+	store.Create("New Food", "food", 1.0, 15.00)
 
-	records, err := store.GetByCategoryPast30Days(12345, "food")
+	records, err := store.GetByCategoryPast30Days("food")
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}

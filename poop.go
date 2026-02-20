@@ -12,7 +12,6 @@ import (
 
 type PoopRecord struct {
 	ID       int64
-	ChatID   int64
 	Datetime time.Time
 	Texture  string
 }
@@ -40,11 +39,10 @@ func (s *PoopStore) initSchema() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS poop_records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		chat_id INTEGER NOT NULL,
 		datetime TEXT NOT NULL,
 		texture TEXT NOT NULL
 	);
-	CREATE INDEX IF NOT EXISTS idx_poop_records_chat_datetime ON poop_records(chat_id, datetime DESC);
+	CREATE INDEX IF NOT EXISTS idx_poop_records_datetime ON poop_records(datetime DESC);
 	`
 	_, err := s.db.Exec(query)
 	return err
@@ -54,10 +52,10 @@ func (s *PoopStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *PoopStore) Create(chatID int64, texture string) (*PoopRecord, error) {
+func (s *PoopStore) Create(texture string) (*PoopRecord, error) {
 	now := time.Now()
-	query := `INSERT INTO poop_records (chat_id, datetime, texture) VALUES (?, ?, ?)`
-	result, err := s.db.Exec(query, chatID, now.Format(time.RFC3339), texture)
+	query := `INSERT INTO poop_records (datetime, texture) VALUES (?, ?)`
+	result, err := s.db.Exec(query, now.Format(time.RFC3339), texture)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
@@ -69,19 +67,18 @@ func (s *PoopStore) Create(chatID int64, texture string) (*PoopRecord, error) {
 
 	return &PoopRecord{
 		ID:       id,
-		ChatID:   chatID,
 		Datetime: now,
 		Texture:  texture,
 	}, nil
 }
 
-func (s *PoopStore) GetByID(id int64, chatID int64) (*PoopRecord, error) {
-	query := `SELECT id, chat_id, datetime, texture FROM poop_records WHERE id = ? AND chat_id = ?`
-	row := s.db.QueryRow(query, id, chatID)
+func (s *PoopStore) GetByID(id int64) (*PoopRecord, error) {
+	query := `SELECT id, datetime, texture FROM poop_records WHERE id = ?`
+	row := s.db.QueryRow(query, id)
 
 	var record PoopRecord
 	var datetimeStr string
-	err := row.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.Texture)
+	err := row.Scan(&record.ID, &datetimeStr, &record.Texture)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -97,9 +94,9 @@ func (s *PoopStore) GetByID(id int64, chatID int64) (*PoopRecord, error) {
 	return &record, nil
 }
 
-func (s *PoopStore) GetAll(chatID int64) ([]PoopRecord, error) {
-	query := `SELECT id, chat_id, datetime, texture FROM poop_records WHERE chat_id = ? ORDER BY datetime DESC`
-	rows, err := s.db.Query(query, chatID)
+func (s *PoopStore) GetAll() ([]PoopRecord, error) {
+	query := `SELECT id, datetime, texture FROM poop_records ORDER BY datetime DESC`
+	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get records: %w", err)
 	}
@@ -109,7 +106,7 @@ func (s *PoopStore) GetAll(chatID int64) ([]PoopRecord, error) {
 	for rows.Next() {
 		var record PoopRecord
 		var datetimeStr string
-		if err := rows.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.Texture); err != nil {
+		if err := rows.Scan(&record.ID, &datetimeStr, &record.Texture); err != nil {
 			return nil, fmt.Errorf("failed to scan record: %w", err)
 		}
 		record.Datetime, err = time.Parse(time.RFC3339, datetimeStr)
@@ -122,9 +119,9 @@ func (s *PoopStore) GetAll(chatID int64) ([]PoopRecord, error) {
 	return records, rows.Err()
 }
 
-func (s *PoopStore) GetRecent(chatID int64, limit int) ([]PoopRecord, error) {
-	query := `SELECT id, chat_id, datetime, texture FROM poop_records WHERE chat_id = ? ORDER BY datetime DESC LIMIT ?`
-	rows, err := s.db.Query(query, chatID, limit)
+func (s *PoopStore) GetRecent(limit int) ([]PoopRecord, error) {
+	query := `SELECT id, datetime, texture FROM poop_records ORDER BY datetime DESC LIMIT ?`
+	rows, err := s.db.Query(query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get records: %w", err)
 	}
@@ -134,7 +131,7 @@ func (s *PoopStore) GetRecent(chatID int64, limit int) ([]PoopRecord, error) {
 	for rows.Next() {
 		var record PoopRecord
 		var datetimeStr string
-		if err := rows.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.Texture); err != nil {
+		if err := rows.Scan(&record.ID, &datetimeStr, &record.Texture); err != nil {
 			return nil, fmt.Errorf("failed to scan record: %w", err)
 		}
 		record.Datetime, err = time.Parse(time.RFC3339, datetimeStr)
@@ -147,8 +144,8 @@ func (s *PoopStore) GetRecent(chatID int64, limit int) ([]PoopRecord, error) {
 	return records, rows.Err()
 }
 
-func (s *PoopStore) GetMostRecent(chatID int64) (*PoopRecord, error) {
-	records, err := s.GetRecent(chatID, 1)
+func (s *PoopStore) GetMostRecent() (*PoopRecord, error) {
+	records, err := s.GetRecent(1)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +155,8 @@ func (s *PoopStore) GetMostRecent(chatID int64) (*PoopRecord, error) {
 	return &records[0], nil
 }
 
-func (s *PoopStore) UpdateTexture(id int64, chatID int64, texture string) (*PoopRecord, error) {
-	existing, err := s.GetByID(id, chatID)
+func (s *PoopStore) UpdateTexture(id int64, texture string) (*PoopRecord, error) {
+	existing, err := s.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +164,8 @@ func (s *PoopStore) UpdateTexture(id int64, chatID int64, texture string) (*Poop
 		return nil, fmt.Errorf("record not found")
 	}
 
-	query := `UPDATE poop_records SET texture = ? WHERE id = ? AND chat_id = ?`
-	_, err = s.db.Exec(query, texture, id, chatID)
+	query := `UPDATE poop_records SET texture = ? WHERE id = ?`
+	_, err = s.db.Exec(query, texture, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update record: %w", err)
 	}
@@ -177,8 +174,8 @@ func (s *PoopStore) UpdateTexture(id int64, chatID int64, texture string) (*Poop
 	return existing, nil
 }
 
-func (s *PoopStore) UpdateDatetime(id int64, chatID int64, datetime time.Time) (*PoopRecord, error) {
-	existing, err := s.GetByID(id, chatID)
+func (s *PoopStore) UpdateDatetime(id int64, datetime time.Time) (*PoopRecord, error) {
+	existing, err := s.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +183,8 @@ func (s *PoopStore) UpdateDatetime(id int64, chatID int64, datetime time.Time) (
 		return nil, fmt.Errorf("record not found")
 	}
 
-	query := `UPDATE poop_records SET datetime = ? WHERE id = ? AND chat_id = ?`
-	_, err = s.db.Exec(query, datetime.Format(time.RFC3339), id, chatID)
+	query := `UPDATE poop_records SET datetime = ? WHERE id = ?`
+	_, err = s.db.Exec(query, datetime.Format(time.RFC3339), id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update record: %w", err)
 	}
@@ -196,9 +193,9 @@ func (s *PoopStore) UpdateDatetime(id int64, chatID int64, datetime time.Time) (
 	return existing, nil
 }
 
-func (s *PoopStore) Delete(id int64, chatID int64) error {
-	query := `DELETE FROM poop_records WHERE id = ? AND chat_id = ?`
-	result, err := s.db.Exec(query, id, chatID)
+func (s *PoopStore) Delete(id int64) error {
+	query := `DELETE FROM poop_records WHERE id = ?`
+	result, err := s.db.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete record: %w", err)
 	}
@@ -214,8 +211,8 @@ func (s *PoopStore) Delete(id int64, chatID int64) error {
 	return nil
 }
 
-func (s *PoopStore) CheckIfOverdue(chatID int64) (*PoopRecord, bool, error) {
-	record, err := s.GetMostRecent(chatID)
+func (s *PoopStore) CheckIfOverdue() (*PoopRecord, bool, error) {
+	record, err := s.GetMostRecent()
 	if err != nil {
 		return nil, false, err
 	}

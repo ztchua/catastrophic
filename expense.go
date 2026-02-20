@@ -12,7 +12,6 @@ import (
 
 type ExpenseRecord struct {
 	ID       int64
-	ChatID   int64
 	Datetime time.Time
 	ItemName string
 	Category string
@@ -43,15 +42,14 @@ func (s *ExpenseStore) initSchema() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS expense_records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		chat_id INTEGER NOT NULL,
 		datetime TEXT NOT NULL,
 		item_name TEXT NOT NULL,
 		category TEXT NOT NULL,
 		quantity REAL NOT NULL,
 		price REAL NOT NULL
 	);
-	CREATE INDEX IF NOT EXISTS idx_expense_records_chat_datetime ON expense_records(chat_id, datetime DESC);
-	CREATE INDEX IF NOT EXISTS idx_expense_records_chat_category ON expense_records(chat_id, category);
+	CREATE INDEX IF NOT EXISTS idx_expense_records_datetime ON expense_records(datetime DESC);
+	CREATE INDEX IF NOT EXISTS idx_expense_records_category ON expense_records(category);
 	`
 	_, err := s.db.Exec(query)
 	return err
@@ -61,10 +59,10 @@ func (s *ExpenseStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *ExpenseStore) Create(chatID int64, itemName string, category string, quantity float64, price float64) (*ExpenseRecord, error) {
+func (s *ExpenseStore) Create(itemName string, category string, quantity float64, price float64) (*ExpenseRecord, error) {
 	now := time.Now()
-	query := `INSERT INTO expense_records (chat_id, datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?, ?)`
-	result, err := s.db.Exec(query, chatID, now.Format(time.RFC3339), itemName, category, quantity, price)
+	query := `INSERT INTO expense_records (datetime, item_name, category, quantity, price) VALUES (?, ?, ?, ?, ?)`
+	result, err := s.db.Exec(query, now.Format(time.RFC3339), itemName, category, quantity, price)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
@@ -76,7 +74,6 @@ func (s *ExpenseStore) Create(chatID int64, itemName string, category string, qu
 
 	return &ExpenseRecord{
 		ID:       id,
-		ChatID:   chatID,
 		Datetime: now,
 		ItemName: itemName,
 		Category: category,
@@ -85,13 +82,13 @@ func (s *ExpenseStore) Create(chatID int64, itemName string, category string, qu
 	}, nil
 }
 
-func (s *ExpenseStore) GetByID(id int64, chatID int64) (*ExpenseRecord, error) {
-	query := `SELECT id, chat_id, datetime, item_name, category, quantity, price FROM expense_records WHERE id = ? AND chat_id = ?`
-	row := s.db.QueryRow(query, id, chatID)
+func (s *ExpenseStore) GetByID(id int64) (*ExpenseRecord, error) {
+	query := `SELECT id, datetime, item_name, category, quantity, price FROM expense_records WHERE id = ?`
+	row := s.db.QueryRow(query, id)
 
 	var record ExpenseRecord
 	var datetimeStr string
-	err := row.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price)
+	err := row.Scan(&record.ID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -107,9 +104,9 @@ func (s *ExpenseStore) GetByID(id int64, chatID int64) (*ExpenseRecord, error) {
 	return &record, nil
 }
 
-func (s *ExpenseStore) GetAll(chatID int64) ([]ExpenseRecord, error) {
-	query := `SELECT id, chat_id, datetime, item_name, category, quantity, price FROM expense_records WHERE chat_id = ? ORDER BY datetime DESC`
-	rows, err := s.db.Query(query, chatID)
+func (s *ExpenseStore) GetAll() ([]ExpenseRecord, error) {
+	query := `SELECT id, datetime, item_name, category, quantity, price FROM expense_records ORDER BY datetime DESC`
+	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get records: %w", err)
 	}
@@ -119,7 +116,7 @@ func (s *ExpenseStore) GetAll(chatID int64) ([]ExpenseRecord, error) {
 	for rows.Next() {
 		var record ExpenseRecord
 		var datetimeStr string
-		if err := rows.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price); err != nil {
+		if err := rows.Scan(&record.ID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price); err != nil {
 			return nil, fmt.Errorf("failed to scan record: %w", err)
 		}
 		record.Datetime, err = time.Parse(time.RFC3339, datetimeStr)
@@ -132,8 +129,8 @@ func (s *ExpenseStore) GetAll(chatID int64) ([]ExpenseRecord, error) {
 	return records, rows.Err()
 }
 
-func (s *ExpenseStore) Update(id int64, chatID int64, itemName string, category string, quantity float64, price float64) (*ExpenseRecord, error) {
-	existing, err := s.GetByID(id, chatID)
+func (s *ExpenseStore) Update(id int64, itemName string, category string, quantity float64, price float64) (*ExpenseRecord, error) {
+	existing, err := s.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +138,8 @@ func (s *ExpenseStore) Update(id int64, chatID int64, itemName string, category 
 		return nil, fmt.Errorf("record not found")
 	}
 
-	query := `UPDATE expense_records SET item_name = ?, category = ?, quantity = ?, price = ? WHERE id = ? AND chat_id = ?`
-	_, err = s.db.Exec(query, itemName, category, quantity, price, id, chatID)
+	query := `UPDATE expense_records SET item_name = ?, category = ?, quantity = ?, price = ? WHERE id = ?`
+	_, err = s.db.Exec(query, itemName, category, quantity, price, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update record: %w", err)
 	}
@@ -154,9 +151,9 @@ func (s *ExpenseStore) Update(id int64, chatID int64, itemName string, category 
 	return existing, nil
 }
 
-func (s *ExpenseStore) Delete(id int64, chatID int64) error {
-	query := `DELETE FROM expense_records WHERE id = ? AND chat_id = ?`
-	result, err := s.db.Exec(query, id, chatID)
+func (s *ExpenseStore) Delete(id int64) error {
+	query := `DELETE FROM expense_records WHERE id = ?`
+	result, err := s.db.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete record: %w", err)
 	}
@@ -172,12 +169,12 @@ func (s *ExpenseStore) Delete(id int64, chatID int64) error {
 	return nil
 }
 
-func (s *ExpenseStore) GetTotalSpentCurrentMonth(chatID int64) (float64, error) {
+func (s *ExpenseStore) GetTotalSpentCurrentMonth() (float64, error) {
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
-	query := `SELECT SUM(quantity * price) FROM expense_records WHERE chat_id = ? AND datetime >= ?`
-	row := s.db.QueryRow(query, chatID, startOfMonth.Format(time.RFC3339))
+	query := `SELECT SUM(quantity * price) FROM expense_records WHERE datetime >= ?`
+	row := s.db.QueryRow(query, startOfMonth.Format(time.RFC3339))
 
 	var total sql.NullFloat64
 	err := row.Scan(&total)
@@ -192,11 +189,11 @@ func (s *ExpenseStore) GetTotalSpentCurrentMonth(chatID int64) (float64, error) 
 	return total.Float64, nil
 }
 
-func (s *ExpenseStore) GetByCategoryPast30Days(chatID int64, category string) ([]ExpenseRecord, error) {
+func (s *ExpenseStore) GetByCategoryPast30Days(category string) ([]ExpenseRecord, error) {
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
 
-	query := `SELECT id, chat_id, datetime, item_name, category, quantity, price FROM expense_records WHERE chat_id = ? AND category = ? AND datetime >= ? ORDER BY datetime DESC`
-	rows, err := s.db.Query(query, chatID, category, thirtyDaysAgo.Format(time.RFC3339))
+	query := `SELECT id, datetime, item_name, category, quantity, price FROM expense_records WHERE category = ? AND datetime >= ? ORDER BY datetime DESC`
+	rows, err := s.db.Query(query, category, thirtyDaysAgo.Format(time.RFC3339))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get records: %w", err)
 	}
@@ -206,7 +203,7 @@ func (s *ExpenseStore) GetByCategoryPast30Days(chatID int64, category string) ([
 	for rows.Next() {
 		var record ExpenseRecord
 		var datetimeStr string
-		if err := rows.Scan(&record.ID, &record.ChatID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price); err != nil {
+		if err := rows.Scan(&record.ID, &datetimeStr, &record.ItemName, &record.Category, &record.Quantity, &record.Price); err != nil {
 			return nil, fmt.Errorf("failed to scan record: %w", err)
 		}
 		record.Datetime, err = time.Parse(time.RFC3339, datetimeStr)

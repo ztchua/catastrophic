@@ -46,7 +46,7 @@ func TestBot_GetSession(t *testing.T) {
 	auth := setupTestAuth(t)
 	bot := NewBot(nil, store, expenseStore, auth)
 
-	session1 := bot.getSession(12345)
+	session1 := bot.getSession()
 	if session1 == nil {
 		t.Fatal("Expected session, got nil")
 	}
@@ -54,14 +54,10 @@ func TestBot_GetSession(t *testing.T) {
 		t.Errorf("Expected StateNone, got %d", session1.State)
 	}
 
-	session2 := bot.getSession(12345)
+	// Should return the same shared session
+	session2 := bot.getSession()
 	if session1 != session2 {
-		t.Error("Expected same session for same chat ID")
-	}
-
-	session3 := bot.getSession(67890)
-	if session1 == session3 {
-		t.Error("Expected different sessions for different chat IDs")
+		t.Error("Expected same session since all users share data")
 	}
 }
 
@@ -75,13 +71,13 @@ func TestBot_ResetSession(t *testing.T) {
 	auth := setupTestAuth(t)
 	bot := NewBot(nil, store, expenseStore, auth)
 
-	session := bot.getSession(12345)
+	session := bot.getSession()
 	session.State = StateAwaitingPoopTexture
 	session.Data["test"] = "value"
 
-	bot.resetSession(12345)
+	bot.resetSession()
 
-	session = bot.getSession(12345)
+	session = bot.getSession()
 	if session.State != StateNone {
 		t.Errorf("Expected StateNone after reset, got %d", session.State)
 	}
@@ -272,7 +268,7 @@ func TestChatSession_InitialState(t *testing.T) {
 
 	auth := setupTestAuth(t)
 	bot := NewBot(nil, store, expenseStore, auth)
-	session := bot.getSession(12345)
+	session := bot.getSession()
 
 	if session.State != StateNone {
 		t.Errorf("Expected initial state to be StateNone, got %d", session.State)
@@ -295,12 +291,11 @@ func TestBot_ConcurrentSessionAccess(t *testing.T) {
 	done := make(chan bool)
 
 	for i := 0; i < 100; i++ {
-		go func(id int) {
-			chatID := int64(id % 10)
-			bot.getSession(chatID)
-			bot.resetSession(chatID)
+		go func() {
+			bot.getSession()
+			bot.resetSession()
 			done <- true
-		}(i)
+		}()
 	}
 
 	for i := 0; i < 100; i++ {
@@ -317,10 +312,9 @@ func TestBot_HandleUpdate_AwaitingTextureState(t *testing.T) {
 
 	auth := setupTestAuth(t)
 	bot := NewBot(nil, store, expenseStore, auth)
-	bot.getSession(12345).State = StateAwaitingPoopTexture
-	bot.getSession(12345).Data["chat_id"] = int64(12345)
+	bot.getSession().State = StateAwaitingPoopTexture
 
-	if bot.getSession(12345).State != StateAwaitingPoopTexture {
+	if bot.getSession().State != StateAwaitingPoopTexture {
 		t.Error("Session state should be StateAwaitingPoopTexture")
 	}
 }

@@ -10,16 +10,13 @@ func TestPoopStore_Create(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	record, err := store.Create(12345, "solid")
+	record, err := store.Create("solid")
 	if err != nil {
 		t.Fatalf("Failed to create record: %v", err)
 	}
 
 	if record.ID == 0 {
 		t.Error("Expected non-zero ID")
-	}
-	if record.ChatID != 12345 {
-		t.Errorf("Expected ChatID 12345, got %d", record.ChatID)
 	}
 	if record.Texture != "solid" {
 		t.Errorf("Expected texture 'solid', got '%s'", record.Texture)
@@ -33,9 +30,9 @@ func TestPoopStore_GetByID(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "soft")
+	created, _ := store.Create("soft")
 
-	record, err := store.GetByID(created.ID, 12345)
+	record, err := store.GetByID(created.ID)
 	if err != nil {
 		t.Fatalf("Failed to get record: %v", err)
 	}
@@ -55,7 +52,7 @@ func TestPoopStore_GetByID_NotFound(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	record, err := store.GetByID(99999, 12345)
+	record, err := store.GetByID(99999)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -64,30 +61,15 @@ func TestPoopStore_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestPoopStore_GetByID_WrongChatID(t *testing.T) {
-	store := setupTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "solid")
-
-	record, err := store.GetByID(created.ID, 99999)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if record != nil {
-		t.Error("Expected nil record for wrong chat ID")
-	}
-}
-
 func TestPoopStore_GetAll(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "solid")
-	store.Create(12345, "soft")
-	store.Create(12345, "liquid")
+	store.Create("solid")
+	store.Create("soft")
+	store.Create("liquid")
 
-	records, err := store.GetAll(12345)
+	records, err := store.GetAll()
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -101,7 +83,7 @@ func TestPoopStore_GetAll_Empty(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	records, err := store.GetAll(12345)
+	records, err := store.GetAll()
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -111,34 +93,16 @@ func TestPoopStore_GetAll_Empty(t *testing.T) {
 	}
 }
 
-func TestPoopStore_GetAll_IsolatedByChatID(t *testing.T) {
-	store := setupTestStore(t)
-	defer store.Close()
-
-	store.Create(12345, "solid")
-	store.Create(67890, "soft")
-
-	records1, _ := store.GetAll(12345)
-	records2, _ := store.GetAll(67890)
-
-	if len(records1) != 1 {
-		t.Errorf("Expected 1 record for chat 12345, got %d", len(records1))
-	}
-	if len(records2) != 1 {
-		t.Errorf("Expected 1 record for chat 67890, got %d", len(records2))
-	}
-}
-
 func TestPoopStore_GetRecent(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
 	for i := 0; i < 15; i++ {
-		store.Create(12345, "texture")
+		store.Create("texture")
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	records, err := store.GetRecent(12345, 10)
+	records, err := store.GetRecent(10)
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -158,7 +122,7 @@ func TestPoopStore_GetRecent_Empty(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	records, err := store.GetRecent(12345, 10)
+	records, err := store.GetRecent(10)
 	if err != nil {
 		t.Fatalf("Failed to get records: %v", err)
 	}
@@ -176,22 +140,22 @@ func TestPoopStore_GetMostRecent(t *testing.T) {
 	oldTime := now.Add(-1 * time.Hour)
 
 	_, err := store.db.Exec(
-		"INSERT INTO poop_records (chat_id, datetime, texture) VALUES (?, ?, ?)",
-		12345, oldTime.Format(time.RFC3339), "first",
+		"INSERT INTO poop_records (datetime, texture) VALUES (?, ?)",
+		oldTime.Format(time.RFC3339), "first",
 	)
 	if err != nil {
 		t.Fatalf("Failed to insert first record: %v", err)
 	}
 
 	_, err = store.db.Exec(
-		"INSERT INTO poop_records (chat_id, datetime, texture) VALUES (?, ?, ?)",
-		12345, now.Format(time.RFC3339), "second",
+		"INSERT INTO poop_records (datetime, texture) VALUES (?, ?)",
+		now.Format(time.RFC3339), "second",
 	)
 	if err != nil {
 		t.Fatalf("Failed to insert second record: %v", err)
 	}
 
-	record, err := store.GetMostRecent(12345)
+	record, err := store.GetMostRecent()
 	if err != nil {
 		t.Fatalf("Failed to get most recent: %v", err)
 	}
@@ -208,7 +172,7 @@ func TestPoopStore_GetMostRecent_Empty(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	record, err := store.GetMostRecent(12345)
+	record, err := store.GetMostRecent()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -221,9 +185,9 @@ func TestPoopStore_UpdateTexture(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "solid")
+	created, _ := store.Create("solid")
 
-	updated, err := store.UpdateTexture(created.ID, 12345, "updated texture")
+	updated, err := store.UpdateTexture(created.ID, "updated texture")
 	if err != nil {
 		t.Fatalf("Failed to update record: %v", err)
 	}
@@ -232,7 +196,7 @@ func TestPoopStore_UpdateTexture(t *testing.T) {
 		t.Errorf("Expected texture 'updated texture', got '%s'", updated.Texture)
 	}
 
-	retrieved, _ := store.GetByID(created.ID, 12345)
+	retrieved, _ := store.GetByID(created.ID)
 	if retrieved.Texture != "updated texture" {
 		t.Errorf("Update not persisted")
 	}
@@ -242,21 +206,9 @@ func TestPoopStore_UpdateTexture_NotFound(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	_, err := store.UpdateTexture(99999, 12345, "texture")
+	_, err := store.UpdateTexture(99999, "texture")
 	if err == nil {
 		t.Error("Expected error for non-existent record")
-	}
-}
-
-func TestPoopStore_UpdateTexture_WrongChatID(t *testing.T) {
-	store := setupTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "solid")
-
-	_, err := store.UpdateTexture(created.ID, 99999, "texture")
-	if err == nil {
-		t.Error("Expected error for wrong chat ID")
 	}
 }
 
@@ -264,10 +216,10 @@ func TestPoopStore_UpdateDatetime(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "solid")
+	created, _ := store.Create("solid")
 	newTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
 
-	updated, err := store.UpdateDatetime(created.ID, 12345, newTime)
+	updated, err := store.UpdateDatetime(created.ID, newTime)
 	if err != nil {
 		t.Fatalf("Failed to update record: %v", err)
 	}
@@ -276,7 +228,7 @@ func TestPoopStore_UpdateDatetime(t *testing.T) {
 		t.Errorf("Expected datetime %v, got %v", newTime, updated.Datetime)
 	}
 
-	retrieved, _ := store.GetByID(created.ID, 12345)
+	retrieved, _ := store.GetByID(created.ID)
 	if !retrieved.Datetime.Equal(newTime) {
 		t.Errorf("Update not persisted")
 	}
@@ -287,22 +239,9 @@ func TestPoopStore_UpdateDatetime_NotFound(t *testing.T) {
 	defer store.Close()
 
 	newTime := time.Now()
-	_, err := store.UpdateDatetime(99999, 12345, newTime)
+	_, err := store.UpdateDatetime(99999, newTime)
 	if err == nil {
 		t.Error("Expected error for non-existent record")
-	}
-}
-
-func TestPoopStore_UpdateDatetime_WrongChatID(t *testing.T) {
-	store := setupTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "solid")
-	newTime := time.Now()
-
-	_, err := store.UpdateDatetime(created.ID, 99999, newTime)
-	if err == nil {
-		t.Error("Expected error for wrong chat ID")
 	}
 }
 
@@ -310,14 +249,14 @@ func TestPoopStore_Delete(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	created, _ := store.Create(12345, "solid")
+	created, _ := store.Create("solid")
 
-	err := store.Delete(created.ID, 12345)
+	err := store.Delete(created.ID)
 	if err != nil {
 		t.Fatalf("Failed to delete record: %v", err)
 	}
 
-	record, _ := store.GetByID(created.ID, 12345)
+	record, _ := store.GetByID(created.ID)
 	if record != nil {
 		t.Error("Record still exists after deletion")
 	}
@@ -327,21 +266,9 @@ func TestPoopStore_Delete_NotFound(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	err := store.Delete(99999, 12345)
+	err := store.Delete(99999)
 	if err == nil {
 		t.Error("Expected error for non-existent record")
-	}
-}
-
-func TestPoopStore_Delete_WrongChatID(t *testing.T) {
-	store := setupTestStore(t)
-	defer store.Close()
-
-	created, _ := store.Create(12345, "solid")
-
-	err := store.Delete(created.ID, 99999)
-	if err == nil {
-		t.Error("Expected error for wrong chat ID")
 	}
 }
 
@@ -349,7 +276,7 @@ func TestPoopStore_CheckIfOverdue_NoRecords(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	record, isOverdue, err := store.CheckIfOverdue(12345)
+	record, isOverdue, err := store.CheckIfOverdue()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -365,9 +292,9 @@ func TestPoopStore_CheckIfOverdue_RecentRecord(t *testing.T) {
 	store := setupTestStore(t)
 	defer store.Close()
 
-	store.Create(12345, "solid")
+	store.Create("solid")
 
-	record, isOverdue, err := store.CheckIfOverdue(12345)
+	record, isOverdue, err := store.CheckIfOverdue()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -383,7 +310,7 @@ func TestPoopStore_CheckIfOverdue_OldRecord(t *testing.T) {
 	store := setupTestStoreWithOldRecord(t, 96*time.Hour)
 	defer store.Close()
 
-	record, isOverdue, err := store.CheckIfOverdue(12345)
+	record, isOverdue, err := store.CheckIfOverdue()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -520,8 +447,8 @@ func setupTestStoreWithOldRecord(t *testing.T, age time.Duration) *PoopStore {
 
 	oldTime := time.Now().Add(-age)
 	_, err := store.db.Exec(
-		"INSERT INTO poop_records (chat_id, datetime, texture) VALUES (?, ?, ?)",
-		12345, oldTime.Format(time.RFC3339), "old",
+		"INSERT INTO poop_records (datetime, texture) VALUES (?, ?)",
+		oldTime.Format(time.RFC3339), "old",
 	)
 	if err != nil {
 		t.Fatalf("Failed to insert old record: %v", err)
