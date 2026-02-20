@@ -86,8 +86,10 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 
 	chatID := update.Message.Chat.ID
 	username := update.Message.From.UserName
+	chatType := update.Message.Chat.Type
+	chatTitle := update.Message.Chat.Title
 
-	if !b.auth.IsAllowed(username) {
+	if !b.auth.IsAllowed(username, chatID, chatType, chatTitle) {
 		b.SendMessage(chatID, "Access denied. You are not authorized to use this bot.")
 		return
 	}

@@ -354,7 +354,7 @@ func setupTestExpenseStore(t *testing.T) *ExpenseStore {
 
 func setupTestAuth(t *testing.T) *AuthService {
 	t.Helper()
-	auth, err := NewAuthService("allowed_users.cfg.example")
+	auth, err := NewAuthService("allowed_users.cfg.example", "allowed_groups.cfg.example")
 	if err != nil {
 		t.Fatalf("Failed to create test auth: %v", err)
 	}

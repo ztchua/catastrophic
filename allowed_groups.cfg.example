@@ -1,0 +1,11 @@
+# Allowed Groups Configuration
+# Add group IDs (negative numbers) or group names (one per line)
+# Lines starting with # are comments
+
+# Example group IDs (recommended - stable identifier):
+# -1001234567890
+# -1009876543210
+
+# Example group names (convenient but can break if group is renamed):
+# My Pet Care Group
+# Family Chat

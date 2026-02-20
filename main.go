@@ -28,11 +28,16 @@ func main() {
 		authPath = "allowed_users.cfg"
 	}
 
-	auth, err := NewAuthService(authPath)
+	authGroupsPath := os.Getenv("ALLOWED_GROUPS_PATH")
+	if authGroupsPath == "" {
+		authGroupsPath = "allowed_groups.cfg"
+	}
+
+	auth, err := NewAuthService(authPath, authGroupsPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize auth: %v", err)
 	}
-	log.Printf("Loaded %d allowed users", auth.GetAllowedCount())
+	log.Printf("Loaded %d allowed users, %d allowed groups", auth.GetAllowedCount(), auth.GetAllowedGroupsCount())
 
 	store, err := NewPoopStore(dbPath)
 	if err != nil {

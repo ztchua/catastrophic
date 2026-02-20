@@ -34,7 +34,7 @@ gofmt -w .
 - **bot.go** - `Bot` struct handles Telegram updates via state machine pattern
 - **poop.go** - `PoopStore` for poop record CRUD with SQLite
 - **expense.go** - `ExpenseStore` for expense tracking with SQLite
-- **auth.go** - `AuthService` validates users against `allowed_users.cfg`
+- **auth.go** - `AuthService` validates users against `allowed_users.cfg` and groups against `allowed_groups.cfg`
 
 **Key patterns:**
 
@@ -50,7 +50,8 @@ gofmt -w .
 | `POOP_DB_PATH` | No | `poop.db` | SQLite file for poop records |
 | `EXPENSE_DB_PATH` | No | `expense.db` | SQLite file for expense records |
 | `ALLOWED_USERS_PATH` | No | `allowed_users.cfg` | Allowed usernames file |
+| `ALLOWED_GROUPS_PATH` | No | `allowed_groups.cfg` | Allowed group IDs/names file |
 
 ## Configuration
 
-Copy `allowed_users.cfg.example` to `allowed_users.cfg` and add Telegram usernames (one per line, with or without `@` prefix). Lines starting with `#` are comments.
+Copy `allowed_users.cfg.example` to `allowed_users.cfg` and add Telegram usernames (one per line, with or without `@` prefix). Lines starting with `#` are comments. Similarly, use `allowed_groups.cfg` for group IDs (negative numbers) or group names.
