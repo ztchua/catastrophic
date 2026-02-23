@@ -23,6 +23,11 @@ func main() {
 		expenseDbPath = "expense.db"
 	}
 
+	countDbPath := os.Getenv("COUNT_DB_PATH")
+	if countDbPath == "" {
+		countDbPath = "count.db"
+	}
+
 	authPath := os.Getenv("ALLOWED_USERS_PATH")
 	if authPath == "" {
 		authPath = "allowed_users.cfg"
@@ -51,6 +56,12 @@ func main() {
 	}
 	defer expenseStore.Close()
 
+	countStore, err := NewCountStore(countDbPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize count store: %v", err)
+	}
+	defer countStore.Close()
+
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v", err)
@@ -59,7 +70,7 @@ func main() {
 	api.Debug = true
 	log.Printf("Authorized on account %s", api.Self.UserName)
 
-	bot := NewBot(api, store, expenseStore, auth)
+	bot := NewBot(api, store, expenseStore, countStore, auth)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

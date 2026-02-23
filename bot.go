@@ -24,6 +24,13 @@ const (
 	StateAwaitingExpensePrice
 	StateAwaitingExpenseUpdateField
 	StateAwaitingExpenseUpdateValue
+	StateAwaitingCountName
+	StateAwaitingCountQuantity
+	StateAwaitingCountThreshold
+	StateAwaitingCountUsageCount
+	StateAwaitingCountUsageDay
+	StateAwaitingCountUpdateField
+	StateAwaitingCountUpdateValue
 )
 
 type ChatSession struct {
@@ -35,16 +42,18 @@ type Bot struct {
 	api          *tgbotapi.BotAPI
 	store        *PoopStore
 	expenseStore *ExpenseStore
+	countStore   *CountStore
 	auth         *AuthService
 	sessions     map[int64]*ChatSession
 	sessionsMu   sync.RWMutex
 }
 
-func NewBot(api *tgbotapi.BotAPI, store *PoopStore, expenseStore *ExpenseStore, auth *AuthService) *Bot {
+func NewBot(api *tgbotapi.BotAPI, store *PoopStore, expenseStore *ExpenseStore, countStore *CountStore, auth *AuthService) *Bot {
 	return &Bot{
 		api:          api,
 		store:        store,
 		expenseStore: expenseStore,
+		countStore:   countStore,
 		auth:         auth,
 		sessions:     make(map[int64]*ChatSession),
 	}
@@ -129,6 +138,27 @@ func (b *Bot) HandleUpdate(update tgbotapi.Update) {
 	case StateAwaitingExpenseUpdateValue:
 		b.handleAwaitingExpenseUpdateValue(update.Message)
 		return
+	case StateAwaitingCountName:
+		b.handleAwaitingCountName(update.Message)
+		return
+	case StateAwaitingCountQuantity:
+		b.handleAwaitingCountQuantity(update.Message)
+		return
+	case StateAwaitingCountThreshold:
+		b.handleAwaitingCountThreshold(update.Message)
+		return
+	case StateAwaitingCountUsageCount:
+		b.handleAwaitingCountUsageCount(update.Message)
+		return
+	case StateAwaitingCountUsageDay:
+		b.handleAwaitingCountUsageDay(update.Message)
+		return
+	case StateAwaitingCountUpdateField:
+		b.handleAwaitingCountUpdateField(update.Message)
+		return
+	case StateAwaitingCountUpdateValue:
+		b.handleAwaitingCountUpdateValue(update.Message)
+		return
 	}
 
 	if !update.Message.IsCommand() {
@@ -189,7 +219,14 @@ Expense Tracking:
 /expense_month - Show total spent this month
 /expense_category <category> - Filter by category (past 30 days)
 /expense_update <id> - Update an expense
-/expense_delete <id> - Delete an expense`)
+/expense_delete <id> - Delete an expense
+
+Essentials Tracking:
+/count_add - Add a new essential to track
+/count_list - List all tracked essentials
+/count_check <name> - Check status of a specific essential
+/count_update <id> - Update an essential
+/count_delete <id> - Delete an essential`)
 
 	case "ping":
 		b.SendMessage(chatID, "Pong!")
@@ -229,6 +266,21 @@ Expense Tracking:
 
 	case "expense_delete":
 		b.handleExpenseDelete(chatID, args)
+
+	case "count_add":
+		b.handleCountAdd(chatID)
+
+	case "count_list":
+		b.handleCountList(chatID)
+
+	case "count_check":
+		b.handleCountCheck(chatID, args)
+
+	case "count_update":
+		b.handleCountUpdate(chatID, args)
+
+	case "count_delete":
+		b.handleCountDelete(chatID, args)
 
 	default:
 		b.SendMessage(chatID, "Unknown command. Use /help to see available commands.")
@@ -725,4 +777,321 @@ func (b *Bot) handleExpenseDelete(chatID int64, args string) {
 	}
 
 	b.SendMessage(chatID, fmt.Sprintf("Expense %d deleted successfully.", id))
+}
+
+func (b *Bot) handleCountAdd(chatID int64) {
+	session := b.getSession()
+	session.State = StateAwaitingCountName
+	b.SendMessage(chatID, "Please enter the name of the essential (e.g., cat food, cat litter):")
+}
+
+func (b *Bot) handleAwaitingCountName(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	name := strings.TrimSpace(msg.Text)
+
+	if name == "" {
+		b.SendMessage(chatID, "Name cannot be empty. Please enter the name:")
+		return
+	}
+
+	existing, _ := b.countStore.GetByName(name)
+	if existing != nil {
+		b.SendMessage(chatID, fmt.Sprintf("An essential with name '%s' already exists. Use a different name or /count_update to update it.", name))
+		b.resetSession()
+		return
+	}
+
+	session.Data["count_name"] = name
+	session.State = StateAwaitingCountQuantity
+	b.SendMessage(chatID, "Please enter the current quantity:")
+}
+
+func (b *Bot) handleAwaitingCountQuantity(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	quantityStr := strings.TrimSpace(msg.Text)
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil || quantity < 0 {
+		b.SendMessage(chatID, "Invalid quantity. Please enter a non-negative integer:")
+		return
+	}
+
+	session.Data["count_quantity"] = quantity
+	session.State = StateAwaitingCountThreshold
+	b.SendMessage(chatID, "Please enter the threshold (minimum quantity before reorder warning):")
+}
+
+func (b *Bot) handleAwaitingCountThreshold(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	thresholdStr := strings.TrimSpace(msg.Text)
+
+	threshold, err := strconv.Atoi(thresholdStr)
+	if err != nil || threshold < 0 {
+		b.SendMessage(chatID, "Invalid threshold. Please enter a non-negative integer:")
+		return
+	}
+
+	session.Data["count_threshold"] = threshold
+	session.State = StateAwaitingCountUsageCount
+	b.SendMessage(chatID, "Please enter the usage count (how many units are used):")
+}
+
+func (b *Bot) handleAwaitingCountUsageCount(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	usageCountStr := strings.TrimSpace(msg.Text)
+
+	usageCount, err := strconv.Atoi(usageCountStr)
+	if err != nil || usageCount < 0 {
+		b.SendMessage(chatID, "Invalid usage count. Please enter a non-negative integer:")
+		return
+	}
+
+	session.Data["count_usage_count"] = usageCount
+	session.State = StateAwaitingCountUsageDay
+	b.SendMessage(chatID, "Please enter the usage period in days (e.g., 7 for weekly usage):")
+}
+
+func (b *Bot) handleAwaitingCountUsageDay(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	usageDayStr := strings.TrimSpace(msg.Text)
+
+	usageDay, err := strconv.Atoi(usageDayStr)
+	if err != nil || usageDay <= 0 {
+		b.SendMessage(chatID, "Invalid usage period. Please enter a positive integer:")
+		return
+	}
+
+	name, _ := session.Data["count_name"].(string)
+	quantity, _ := session.Data["count_quantity"].(int)
+	threshold, _ := session.Data["count_threshold"].(int)
+	usageCount, _ := session.Data["count_usage_count"].(int)
+
+	record, err := b.countStore.Create(name, quantity, threshold, usageCount, usageDay)
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to save essential: %v", err))
+		b.resetSession()
+		return
+	}
+
+	b.SendMessage(chatID, fmt.Sprintf("Essential saved!\n%s", FormatCountRecord(record)))
+	b.resetSession()
+}
+
+func (b *Bot) handleCountList(chatID int64) {
+	records, err := b.countStore.GetAll()
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to get essentials: %v", err))
+		return
+	}
+
+	if len(records) == 0 {
+		b.SendMessage(chatID, "No essentials tracked. Use /count_add to add one.")
+		return
+	}
+
+	result := fmt.Sprintf("Tracked Essentials (%d total):\n\n%s", len(records), FormatCountRecordsList(records, b.countStore))
+	b.SendMessage(chatID, result)
+}
+
+func (b *Bot) handleCountCheck(chatID int64, args string) {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		b.SendMessage(chatID, "Usage: /count_check <name>")
+		return
+	}
+
+	record, err := b.countStore.GetByName(args)
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to get essential: %v", err))
+		return
+	}
+	if record == nil {
+		b.SendMessage(chatID, fmt.Sprintf("Essential '%s' not found.", args))
+		return
+	}
+
+	remaining, _ := b.countStore.CalculateRemainingQuantity(args)
+	exhaustionDate, _ := b.countStore.CalculateExhaustionDate(args)
+	isBelowThreshold, _ := b.countStore.CheckIfBelowThreshold(args)
+
+	b.SendMessage(chatID, FormatCountRecordWithEstimate(record, remaining, exhaustionDate, isBelowThreshold))
+}
+
+func (b *Bot) handleCountUpdate(chatID int64, args string) {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		b.SendMessage(chatID, "Usage: /count_update <id>")
+		return
+	}
+
+	id, err := strconv.ParseInt(args, 10, 64)
+	if err != nil {
+		b.SendMessage(chatID, "Invalid ID. Please provide a numeric ID.")
+		return
+	}
+
+	record, err := b.countStore.GetByID(id)
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to get essential: %v", err))
+		return
+	}
+	if record == nil {
+		b.SendMessage(chatID, "Essential record not found.")
+		return
+	}
+
+	session := b.getSession()
+	session.State = StateAwaitingCountUpdateField
+	session.Data["count_update_id"] = id
+
+	b.SendMessage(chatID, fmt.Sprintf(`Current record:
+%s
+
+What would you like to update?
+Reply with:
+1 - Name
+2 - Quantity
+3 - Threshold
+4 - Usage Count
+5 - Usage Day`, FormatCountRecord(record)))
+}
+
+func (b *Bot) handleAwaitingCountUpdateField(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+	text := strings.TrimSpace(msg.Text)
+
+	switch text {
+	case "1":
+		session.Data["count_update_field"] = "name"
+		session.State = StateAwaitingCountUpdateValue
+		b.SendMessage(chatID, "Please enter the new name:")
+	case "2":
+		session.Data["count_update_field"] = "quantity"
+		session.State = StateAwaitingCountUpdateValue
+		b.SendMessage(chatID, "Please enter the new quantity:")
+	case "3":
+		session.Data["count_update_field"] = "threshold"
+		session.State = StateAwaitingCountUpdateValue
+		b.SendMessage(chatID, "Please enter the new threshold:")
+	case "4":
+		session.Data["count_update_field"] = "usage_count"
+		session.State = StateAwaitingCountUpdateValue
+		b.SendMessage(chatID, "Please enter the new usage count:")
+	case "5":
+		session.Data["count_update_field"] = "usage_day"
+		session.State = StateAwaitingCountUpdateValue
+		b.SendMessage(chatID, "Please enter the new usage period in days:")
+	default:
+		b.SendMessage(chatID, "Invalid option. Reply with:\n1 - Name\n2 - Quantity\n3 - Threshold\n4 - Usage Count\n5 - Usage Day")
+	}
+}
+
+func (b *Bot) handleAwaitingCountUpdateValue(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	session := b.getSession()
+
+	id, ok := session.Data["count_update_id"].(int64)
+	if !ok {
+		b.SendMessage(chatID, "Session error. Please start over with /count_update <id>")
+		b.resetSession()
+		return
+	}
+
+	field, ok := session.Data["count_update_field"].(string)
+	if !ok {
+		b.SendMessage(chatID, "Session error. Please start over with /count_update <id>")
+		b.resetSession()
+		return
+	}
+
+	record, err := b.countStore.GetByID(id)
+	if err != nil || record == nil {
+		b.SendMessage(chatID, "Failed to get essential record")
+		b.resetSession()
+		return
+	}
+
+	newName := record.Name
+	newQuantity := record.Quantity
+	newThreshold := record.Threshold
+	newUsageCount := record.UsageCount
+	newUsageDay := record.UsageDay
+
+	switch field {
+	case "name":
+		newName = strings.TrimSpace(msg.Text)
+		if newName == "" {
+			b.SendMessage(chatID, "Name cannot be empty. Please enter the new name:")
+			return
+		}
+	case "quantity":
+		quantity, parseErr := strconv.Atoi(strings.TrimSpace(msg.Text))
+		if parseErr != nil || quantity < 0 {
+			b.SendMessage(chatID, "Invalid quantity. Please enter a non-negative integer:")
+			return
+		}
+		newQuantity = quantity
+	case "threshold":
+		threshold, parseErr := strconv.Atoi(strings.TrimSpace(msg.Text))
+		if parseErr != nil || threshold < 0 {
+			b.SendMessage(chatID, "Invalid threshold. Please enter a non-negative integer:")
+			return
+		}
+		newThreshold = threshold
+	case "usage_count":
+		usageCount, parseErr := strconv.Atoi(strings.TrimSpace(msg.Text))
+		if parseErr != nil || usageCount < 0 {
+			b.SendMessage(chatID, "Invalid usage count. Please enter a non-negative integer:")
+			return
+		}
+		newUsageCount = usageCount
+	case "usage_day":
+		usageDay, parseErr := strconv.Atoi(strings.TrimSpace(msg.Text))
+		if parseErr != nil || usageDay <= 0 {
+			b.SendMessage(chatID, "Invalid usage period. Please enter a positive integer:")
+			return
+		}
+		newUsageDay = usageDay
+	default:
+		b.SendMessage(chatID, "Session error. Please start over with /count_update <id>")
+		b.resetSession()
+		return
+	}
+
+	updated, err := b.countStore.Update(id, newName, newQuantity, newThreshold, newUsageCount, newUsageDay)
+	if err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to update essential: %v", err))
+		b.resetSession()
+		return
+	}
+
+	b.SendMessage(chatID, fmt.Sprintf("Essential updated!\n%s", FormatCountRecord(updated)))
+	b.resetSession()
+}
+
+func (b *Bot) handleCountDelete(chatID int64, args string) {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		b.SendMessage(chatID, "Usage: /count_delete <id>")
+		return
+	}
+
+	id, err := strconv.ParseInt(args, 10, 64)
+	if err != nil {
+		b.SendMessage(chatID, "Invalid ID. Please provide a numeric ID.")
+		return
+	}
+
+	if err := b.countStore.Delete(id); err != nil {
+		b.SendMessage(chatID, fmt.Sprintf("Failed to delete essential: %v", err))
+		return
+	}
+
+	b.SendMessage(chatID, fmt.Sprintf("Essential %d deleted successfully.", id))
 }
